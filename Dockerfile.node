@@ -1,0 +1,22 @@
+FROM node:20-slim AS build
+WORKDIR /app
+COPY package*.json ./
+COPY tsconfig.base.json ./
+COPY services ./services
+COPY packages ./packages
+RUN --mount=type=cache,target=/root/.npm npm install
+RUN npm run build -ws --if-present
+
+FROM node:20-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package*.json ./
+COPY tsconfig.base.json ./
+COPY services ./services
+COPY packages ./packages
+RUN --mount=type=cache,target=/root/.npm npm install -ws --omit=dev --ignore-scripts
+# Overwrite with built artifacts (ensures dist exists even if src excluded later)
+COPY --from=build /app/services ./services
+COPY --from=build /app/packages ./packages
+CMD ["node", "services/auth/dist/index.js"]
+

@@ -1,0 +1,51 @@
+import Fastify from 'fastify';
+import jwt from '@fastify/jwt';
+import { z } from 'zod';
+import pg from 'pg';
+
+type Product = { id: string; name: string; price: number; sellerId: string };
+const { Pool } = pg as any;
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+const app = Fastify({ logger: true });
+const port = Number(process.env.PORT || 3003);
+const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';
+app.register(jwt as any, { secret: jwtSecret } as any);
+
+app.get('/health', async () => ({ status: 'ok', service: 'catalog' }));
+
+// Seed demo products if empty
+// list products from DB
+app.get('/products', async () => {
+  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId" from products order by id limit 100');
+  return rows;
+});
+
+const createSchema = z.object({ name: z.string().min(1), price: z.number().positive() });
+app.post('/products', async (req, reply) => {
+  try { await (req as any).jwtVerify(); } catch { return reply.code(401).send({ error: 'Unauthorized' }); }
+  const parsed = createSchema.safeParse(req.body);
+  if (!parsed.success) return reply.code(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
+  const user = (req as any).user as { sub: string };
+  const { rows } = await pool.query('insert into products(name, price, seller_id) values ($1,$2,$3) returning id, name, price, seller_id as "sellerId"', [parsed.data.name, parsed.data.price, Number(user.sub)]);
+  return reply.code(201).send(rows[0]);
+});
+
+app.get('/products/:id', async (req, reply) => {
+  const id = (req.params as any).id as string;
+  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId" from products where id=$1', [Number(id)]);
+  if (!rows.length) return reply.code(404).send({ error: 'Not found' });
+  return rows[0];
+});
+
+async function start() {
+  try {
+    const address = await app.listen({ port, host: '0.0.0.0' });
+    app.log.info({ address }, 'listening');
+  } catch (err) {
+    app.log.error(err);
+    process.exit(1);
+  }
+}
+
+start();

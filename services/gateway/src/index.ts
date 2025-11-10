@@ -1,0 +1,140 @@
+import Fastify from 'fastify';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore types may be missing, runtime import is fine
+import fastifyStatic from '@fastify/static';
+import * as path from 'path';
+// Custom lightweight reverse proxy using fetch
+
+const app = Fastify({ logger: true });
+const port = Number(process.env.PORT || 3500);
+
+const targets = {
+  auth: process.env.AUTH_URL || 'http://127.0.0.1:3001',
+  profile: process.env.PROFILE_URL || 'http://127.0.0.1:3002',
+  catalog: process.env.CATALOG_URL || 'http://127.0.0.1:3003',
+  inventory: process.env.INVENTORY_URL || 'http://127.0.0.1:3004',
+  orders: process.env.ORDERS_URL || 'http://127.0.0.1:3005',
+  payments: process.env.PAYMENTS_URL || 'http://127.0.0.1:3006',
+  shipping: process.env.SHIPPING_URL || 'http://127.0.0.1:3007',
+  notifications: process.env.NOTIFY_URL || 'http://127.0.0.1:3008',
+};
+
+app.get('/health', async () => ({ status: 'ok', service: 'gateway' }));
+
+app.get('/upstreams', async () => {
+  const urls = [
+    { name: 'auth', url: targets.auth + '/health' },
+    { name: 'profile', url: targets.profile + '/health' },
+    { name: 'catalog', url: targets.catalog + '/health' },
+    { name: 'inventory', url: targets.inventory + '/health' },
+    { name: 'orders', url: targets.orders + '/health' },
+    { name: 'payments', url: targets.payments + '/health' },
+    { name: 'shipping', url: targets.shipping + '/health' },
+    { name: 'notifications', url: targets.notifications + '/health' },
+  ];
+  const results: any = {};
+  for (const u of urls) {
+    try {
+      const r = await fetch(u.url);
+      results[u.name] = { ok: r.ok, status: r.status };
+    } catch (e: any) {
+      results[u.name] = { ok: false, error: String(e && e.message || e) };
+    }
+  }
+  return results;
+});
+
+// Removed inline homepage route. SPA is served from services/web/dist via static plugin below.
+// Serve SPA build if exists
+try {
+  // __dirname is available in CJS output; tsconfig compiles to commonjs here
+  // eslint-disable-next-line no-undef
+  const webDist = path.resolve(__dirname as any, '../../web/dist');
+  (app as any).register(fastifyStatic as any, { root: webDist, prefix: '/' } as any);
+  // SPA fallback: serve index.html for unknown GET routes not starting with API prefix
+  const apiPrefixes = ['/api','/upstreams','/health'];
+  app.setNotFoundHandler((req: any, reply: any) => {
+    const url = req.url || '';
+    if (req.method !== 'GET' || apiPrefixes.some((p) => url.startsWith(p))) {
+      return reply.code(404).send({ error: 'Not Found' });
+    }
+    return reply.type('text/html').sendFile('index.html');
+  });
+} catch {}
+
+type UpstreamKey = keyof typeof targets;
+function registerProxy(prefix: string, upstreamKey: UpstreamKey) {
+  const base = targets[upstreamKey].replace(/\/$/, '');
+  const handler = async (req: any, reply: any) => {
+    const originalPath = (req.raw && typeof req.raw.url === 'string') ? req.raw.url : (req.url || '');
+    // Strip leading /api to match upstream service routes (e.g., /api/products -> /products)
+    const strippedPath = originalPath.replace(/^\/(api)(?=\/|$)/, '');
+    const pathForUpstream = strippedPath.startsWith('/') ? strippedPath : ('/' + strippedPath);
+    const targetUrl = new URL(pathForUpstream, base).toString();
+    const method = req.method;
+    const incomingHeaders = req.headers as Record<string, string | string[]>;
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(incomingHeaders)) {
+      if (k.toLowerCase() === 'host') continue;
+      if (Array.isArray(v)) headers[k] = v.join(','); else if (v !== undefined) headers[k] = String(v);
+    }
+    let body: any = undefined;
+    if (method !== 'GET' && method !== 'HEAD') {
+      try {
+        const ct = (headers['content-type'] || '').toLowerCase();
+        if (ct.includes('application/json') && req.body && typeof req.body === 'object') {
+          body = JSON.stringify(req.body);
+          headers['content-length'] = Buffer.byteLength(body).toString();
+        } else {
+          const chunks: Buffer[] = [];
+          await new Promise<void>((resolve, reject) => {
+            req.raw.on('data', (c: Buffer) => chunks.push(c));
+            req.raw.on('end', () => resolve());
+            req.raw.on('error', reject);
+          });
+          body = chunks.length ? Buffer.concat(chunks) : undefined;
+          if (body) headers['content-length'] = Buffer.byteLength(body).toString();
+        }
+      } catch {}
+    }
+    try {
+      const res = await fetch(targetUrl, { method, headers, body: body as any });
+      reply.status(res.status);
+      res.headers.forEach((val, key) => {
+        if (key.toLowerCase() === 'content-encoding') return;
+        reply.header(key, val);
+      });
+      const buf = Buffer.from(await res.arrayBuffer());
+      return reply.send(buf);
+    } catch (err: any) {
+      req.log.error({ err, url: targetUrl }, 'proxy error');
+      return reply.code(503).send({ error: 'Service Unavailable', url: targetUrl, message: err?.message || String(err) });
+    }
+  };
+  // exact prefix and nested routes
+  app.all(prefix, handler);
+  app.all(`${prefix}/*`, handler);
+}
+
+// Mount API under /api/* to avoid clashing with SPA routes
+registerProxy('/api/auth', 'auth');
+registerProxy('/api/profiles', 'profile');
+registerProxy('/api/products', 'catalog');
+registerProxy('/api/inventory', 'inventory');
+registerProxy('/api/orders', 'orders');
+registerProxy('/api/payments', 'payments');
+registerProxy('/api/shipping', 'shipping');
+registerProxy('/api/notify', 'notifications');
+
+async function start() {
+  try {
+    const address = await app.listen({ port, host: '0.0.0.0' });
+    app.log.info({ address }, 'gateway listening');
+  } catch (err) {
+    app.log.error(err);
+    process.exit(1);
+  }
+}
+
+start();
+
