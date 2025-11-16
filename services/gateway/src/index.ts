@@ -8,15 +8,18 @@ import * as path from 'path';
 const app = Fastify({ logger: true });
 const port = Number(process.env.PORT || 3500);
 
+// Fastify already parses JSON by default, no need to add custom parser
+
 const targets = {
   auth: process.env.AUTH_URL || 'http://127.0.0.1:3001',
   profile: process.env.PROFILE_URL || 'http://127.0.0.1:3002',
-  catalog: process.env.CATALOG_URL || 'http://127.0.0.1:3003',
+  productOrder: process.env.PRODUCT_ORDER_URL || 'http://127.0.0.1:3005',
   inventory: process.env.INVENTORY_URL || 'http://127.0.0.1:3004',
-  orders: process.env.ORDERS_URL || 'http://127.0.0.1:3005',
   payments: process.env.PAYMENTS_URL || 'http://127.0.0.1:3006',
   shipping: process.env.SHIPPING_URL || 'http://127.0.0.1:3007',
   notifications: process.env.NOTIFY_URL || 'http://127.0.0.1:3008',
+  images: process.env.IMAGES_URL || 'http://127.0.0.1:3009',
+  search: process.env.SEARCH_URL || 'http://127.0.0.1:3010',
 };
 
 app.get('/health', async () => ({ status: 'ok', service: 'gateway' }));
@@ -25,12 +28,13 @@ app.get('/upstreams', async () => {
   const urls = [
     { name: 'auth', url: targets.auth + '/health' },
     { name: 'profile', url: targets.profile + '/health' },
-    { name: 'catalog', url: targets.catalog + '/health' },
+    { name: 'product-order', url: targets.productOrder + '/health' },
     { name: 'inventory', url: targets.inventory + '/health' },
-    { name: 'orders', url: targets.orders + '/health' },
     { name: 'payments', url: targets.payments + '/health' },
     { name: 'shipping', url: targets.shipping + '/health' },
     { name: 'notifications', url: targets.notifications + '/health' },
+    { name: 'images', url: targets.images + '/health' },
+    { name: 'search', url: targets.search + '/health' },
   ];
   const results: any = {};
   for (const u of urls) {
@@ -82,10 +86,15 @@ function registerProxy(prefix: string, upstreamKey: UpstreamKey) {
     if (method !== 'GET' && method !== 'HEAD') {
       try {
         const ct = (headers['content-type'] || '').toLowerCase();
-        if (ct.includes('application/json') && req.body && typeof req.body === 'object') {
-          body = JSON.stringify(req.body);
-          headers['content-length'] = Buffer.byteLength(body).toString();
+        if (ct.includes('application/json')) {
+          // Fastify already parsed JSON body, just stringify it back
+          if (req.body !== undefined) {
+            body = JSON.stringify(req.body);
+            headers['content-type'] = 'application/json';
+            headers['content-length'] = Buffer.byteLength(body).toString();
+          }
         } else {
+          // For non-JSON, read raw body
           const chunks: Buffer[] = [];
           await new Promise<void>((resolve, reject) => {
             req.raw.on('data', (c: Buffer) => chunks.push(c));
@@ -95,7 +104,9 @@ function registerProxy(prefix: string, upstreamKey: UpstreamKey) {
           body = chunks.length ? Buffer.concat(chunks) : undefined;
           if (body) headers['content-length'] = Buffer.byteLength(body).toString();
         }
-      } catch {}
+      } catch (err: any) {
+        req.log.warn({ err }, 'Error reading body');
+      }
     }
     try {
       const res = await fetch(targetUrl, { method, headers, body: body as any });
@@ -119,12 +130,14 @@ function registerProxy(prefix: string, upstreamKey: UpstreamKey) {
 // Mount API under /api/* to avoid clashing with SPA routes
 registerProxy('/api/auth', 'auth');
 registerProxy('/api/profiles', 'profile');
-registerProxy('/api/products', 'catalog');
+registerProxy('/api/products', 'productOrder');
+registerProxy('/api/orders', 'productOrder');
 registerProxy('/api/inventory', 'inventory');
-registerProxy('/api/orders', 'orders');
 registerProxy('/api/payments', 'payments');
 registerProxy('/api/shipping', 'shipping');
 registerProxy('/api/notify', 'notifications');
+registerProxy('/api/images', 'images');
+registerProxy('/api/search', 'search');
 
 async function start() {
   try {

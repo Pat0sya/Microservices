@@ -7,6 +7,7 @@ const pg = require('pg');
 type ShippingStage = 'processing' | 'collected' | 'in_transit' | 'delivered_to_pickup' | 'received';
 type OrderStatus = 'created_unpaid' | 'created_paid' | 'failed' | ShippingStage;
 type Order = { id: string; userId: string; productId: string; qty: number; status: OrderStatus; trackingId?: string };
+type Product = { id: string; name: string; price: number; sellerId: string };
 
 const { Pool } = pg as any;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -16,10 +17,9 @@ const port = Number(process.env.PORT || 3005);
 const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';
 app.register(jwt as any, { secret: jwtSecret } as any);
 
-app.get('/health', async () => ({ status: 'ok', service: 'orders' }));
+app.get('/health', async () => ({ status: 'ok', service: 'product-order' }));
 
 const baseUrl = {
-  catalog: process.env.CATALOG_URL || 'http://127.0.0.1:3003',
   inventory: process.env.INVENTORY_URL || 'http://127.0.0.1:3004',
   payments: process.env.PAYMENTS_URL || 'http://127.0.0.1:3006',
   shipping: process.env.SHIPPING_URL || 'http://127.0.0.1:3007',
@@ -39,6 +39,35 @@ async function setOrderStatus(orderId: string, status: OrderStatus, trackingId?:
   await pool.query(`update orders set ${setClause} where id=$${values.length+1}`, [...values, Number(orderId)]);
 }
 
+// Вложенная функция для обработки платежа - вызывает сервис Payments
+async function processPayment(orderId: string, amount: number, currency: string, userEmail: string): Promise<{ ok: boolean; paymentId?: string; error?: string }> {
+  // Эта вложенная функция внутри processOrder выполняет HTTP-запрос к микросервису Payments
+  let paid = false;
+  let paymentId: string | undefined;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    paymentId = `p-${orderId}-${attempt}`;
+    const r = await fetch(`${baseUrl.payments}/payments/charge`, { 
+      method: 'POST', 
+      headers: { 'content-type': 'application/json' }, 
+      body: JSON.stringify({ paymentId, amount, currency, orderId }) 
+    });
+    if (r.ok) { 
+      paid = true; 
+      break; 
+    }
+  }
+  if (!paid) {
+    // Вложенная функция также вызывает сервис Notifications
+    await fetch(`${baseUrl.notifications}/notify`, { 
+      method: 'POST', 
+      headers: { 'content-type': 'application/json' }, 
+      body: JSON.stringify({ type: 'payment_failed', to: userEmail, payload: { id: orderId } }) 
+    });
+    return { ok: false, error: 'Payment failed' };
+  }
+  return { ok: true, paymentId };
+}
+
 async function processOrder(order: Order, userEmail: string) {
   const reservationId = `r-${order.id}-${Date.now()}`;
   // Reserve stock
@@ -51,20 +80,17 @@ async function processOrder(order: Order, userEmail: string) {
     }
   }
 
-  // Charge payment (retry up to 3 attempts to avoid deterministic odd failure)
-  {
-    let paid = false;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const paymentId = `p-${order.id}-${attempt}`;
-      const r = await fetch(`${baseUrl.payments}/payments/charge`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ paymentId, amount: 100, currency: 'USD', orderId: order.id }) });
-      if (r.ok) { paid = true; break; }
-    }
-    if (!paid) {
-      await fetch(`${baseUrl.inventory}/inventory/release`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reservationId }) });
-      await fetch(`${baseUrl.notifications}/notify`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'payment_failed', to: userEmail, payload: { id: order.id } }) });
-      await setOrderStatus(order.id, 'failed');
-      return { ok: false, code: 402, error: 'Payment failed' };
-    }
+  // Получаем цену продукта из БД для расчета суммы платежа
+  const productRes = await pool.query('select price from products where id=$1', [Number(order.productId)]);
+  const productPrice = productRes.rows[0]?.price || 0;
+  const totalAmount = Number(productPrice) * order.qty;
+
+  // Используем вложенную функцию processPayment для обработки платежа
+  const paymentResult = await processPayment(order.id, totalAmount, 'USD', userEmail);
+  if (!paymentResult.ok) {
+    await fetch(`${baseUrl.inventory}/inventory/release`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reservationId }) });
+    await setOrderStatus(order.id, 'failed');
+    return { ok: false, code: 402, error: paymentResult.error || 'Payment failed' };
   }
 
   // Commit stock
@@ -164,6 +190,31 @@ app.post('/orders/:id/received', async (req, reply) => {
   if (o.status !== 'delivered_to_pickup') return reply.code(409).send({ error: 'Not ready to receive' });
   await setOrderStatus(String(o.id), 'received');
   return { ok: true };
+});
+
+// ========== PRODUCT ENDPOINTS ==========
+// Products endpoints (объединены с orders в один микросервис)
+
+app.get('/products', async () => {
+  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId" from products order by id limit 100');
+  return rows;
+});
+
+const createProductSchema = z.object({ name: z.string().min(1), price: z.number().positive() });
+app.post('/products', async (req, reply) => {
+  try { await (req as any).jwtVerify(); } catch { return reply.code(401).send({ error: 'Unauthorized' }); }
+  const parsed = createProductSchema.safeParse(req.body);
+  if (!parsed.success) return reply.code(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
+  const user = (req as any).user as { sub: string };
+  const { rows } = await pool.query('insert into products(name, price, seller_id) values ($1,$2,$3) returning id, name, price, seller_id as "sellerId"', [parsed.data.name, parsed.data.price, Number(user.sub)]);
+  return reply.code(201).send(rows[0]);
+});
+
+app.get('/products/:id', async (req, reply) => {
+  const id = (req.params as any).id as string;
+  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId" from products where id=$1', [Number(id)]);
+  if (!rows.length) return reply.code(404).send({ error: 'Not found' });
+  return rows[0];
 });
 
 async function start() {

@@ -46,8 +46,25 @@ app.post('/profiles/me/cart', async (req, reply) => {
   const { productId, qty } = parsed.data;
   if (qty === 0) {
     await pool.query('delete from cart where user_id=$1 and product_id=$2', [userId, productId]);
+    return { ok: true };
   } else {
-    await pool.query('insert into cart(user_id, product_id, qty) values ($1,$2,$3) on conflict (user_id, product_id) do update set qty=excluded.qty', [userId, productId, qty]);
+    // Use UPSERT: if record exists, update qty to the new value; otherwise insert new
+    // This is atomic and prevents race conditions
+    await pool.query(
+      `insert into cart(user_id, product_id, qty) 
+       values ($1, $2, $3) 
+       on conflict (user_id, product_id) 
+       do update set qty = excluded.qty`,
+      [userId, productId, qty]
+    );
+  }
+  // Return updated cart item to confirm the operation
+  const { rows } = await pool.query(
+    'select product_id as "productId", qty from cart where user_id=$1 and product_id=$2',
+    [userId, productId]
+  );
+  if (rows.length > 0) {
+    return { ok: true, productId: String(rows[0].productId), qty: Number(rows[0].qty) };
   }
   return { ok: true };
 });

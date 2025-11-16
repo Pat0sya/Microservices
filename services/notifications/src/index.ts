@@ -31,6 +31,36 @@ app.get('/notify/logs', async () => {
   }
 });
 
+// Получение уведомлений для конкретного пользователя
+app.get('/notify/user/:userId', async (req, reply) => {
+  const userId = (req.params as any).userId as string;
+  try {
+    const { rows } = await pool.query(
+      'select id, type, recipient, payload, created_at from notifications where recipient=$1 order by id desc limit 50',
+      [userId]
+    );
+    return rows;
+  } catch (err: any) {
+    app.log.error({ err }, 'Error fetching user notifications');
+    return reply.code(500).send({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// Удаление уведомления
+app.delete('/notify/:id', async (req, reply) => {
+  const id = (req.params as any).id as string;
+  try {
+    const { rowCount } = await pool.query('delete from notifications where id=$1', [Number(id)]);
+    if (!rowCount) {
+      return reply.code(404).send({ error: 'Notification not found' });
+    }
+    return { deleted: true, id };
+  } catch (err: any) {
+    app.log.error({ err }, 'Error deleting notification');
+    return reply.code(500).send({ error: 'Failed to delete notification' });
+  }
+});
+
 async function start() {
   try {
     const address = await app.listen({ port, host: '0.0.0.0' });

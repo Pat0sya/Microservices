@@ -33,6 +33,23 @@ app.post('/auth/register', async (req, reply) => {
   if (exists.rowCount) return reply.code(409).send({ error: 'User already exists' });
   const passwordHash = await argon2.hash(password);
   const { rows } = await pool.query('insert into users(email, password_hash, role) values ($1,$2,$3) returning id, email, role', [email, passwordHash, role]);
+  
+  // HTTP-взаимодействие: вызываем сервис Profile для создания профиля пользователя
+  const profileUrl = process.env.PROFILE_URL || 'http://127.0.0.1:3002';
+  try {
+    await fetch(`${profileUrl}/profiles/me`, {
+      method: 'PUT',
+      headers: { 
+        'content-type': 'application/json',
+        'authorization': `Bearer ${(app as any).jwt.sign({ sub: String(rows[0].id), email: rows[0].email, role: rows[0].role })}`
+      },
+      body: JSON.stringify({ name: email.split('@')[0] })
+    });
+  } catch (err) {
+    // Логируем ошибку, но не прерываем регистрацию
+    app.log.warn({ err }, 'Failed to create profile during registration');
+  }
+  
   return reply.code(201).send(rows[0]);
 });
 
@@ -64,6 +81,18 @@ app.get('/auth/me', async (req, reply) => {
   }
   const payload = (req as any).user as { sub: string; email: string; role?: Role };
   return { id: payload.sub, email: payload.email, role: payload.role ?? 'user' };
+});
+
+// Refresh token endpoint
+app.post('/auth/refresh', async (req, reply) => {
+  try {
+    await (req as any).jwtVerify();
+  } catch (err) {
+    return reply.code(401).send({ error: 'Unauthorized' });
+  }
+  const payload = (req as any).user as { sub: string; email: string; role?: Role };
+  const token = (app as any).jwt.sign({ sub: payload.sub, email: payload.email, role: payload.role ?? 'user' });
+  return { token };
 });
 
 async function start() {

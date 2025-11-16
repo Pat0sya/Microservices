@@ -17,9 +17,11 @@ services:
       - PORT=3501
       - JWT_SECRET=dev-secret-change-me
       - DATABASE_URL=postgres://app:app@db:5432/app
+      - PROFILE_URL=http://profile:3502
     command: ["node", "services/auth/dist/index.js"]
     ports:
       - "3501:3501"
+    depends_on: [db]
   profile:
     build:
       context: .
@@ -32,18 +34,6 @@ services:
     ports:
       - "3502:3502"
     depends_on: [auth]
-  catalog:
-    build:
-      context: .
-      dockerfile: Dockerfile.node
-    environment:
-      - PORT=3503
-      - JWT_SECRET=dev-secret-change-me
-      - DATABASE_URL=postgres://app:app@db:5432/app
-    command: ["node", "services/catalog/dist/index.js"]
-    ports:
-      - "3503:3503"
-    depends_on: [auth]
   inventory:
     build:
       context: .
@@ -55,7 +45,7 @@ services:
     command: ["node", "services/inventory/dist/index.js"]
     ports:
       - "3504:3504"
-  orders:
+  product-order:
     build:
       context: .
       dockerfile: Dockerfile.node
@@ -63,7 +53,6 @@ services:
       - PORT=3505
       - JWT_SECRET=dev-secret-change-me
       - DATABASE_URL=postgres://app:app@db:5432/app
-      - CATALOG_URL=http://catalog:3503
       - INVENTORY_URL=http://inventory:3504
       - PAYMENTS_URL=http://payments:3506
       - SHIPPING_URL=http://shipping:3507
@@ -71,7 +60,7 @@ services:
     command: ["node", "services/orders/dist/index.js"]
     ports:
       - "3505:3505"
-    depends_on: [catalog, inventory, payments, shipping, notifications]
+    depends_on: [inventory, payments, notifications]
   payments:
     build:
       context: .
@@ -89,9 +78,12 @@ services:
     environment:
       - PORT=3507
       - DATABASE_URL=postgres://app:app@db:5432/app
+      - ORDERS_URL=http://product-order:3505
+      - NOTIFY_URL=http://notifications:3508
     command: ["node", "services/shipping/dist/index.js"]
     ports:
       - "3507:3507"
+    depends_on: [notifications, db]
   notifications:
     build:
       context: .
@@ -102,6 +94,26 @@ services:
     command: ["node", "services/notifications/dist/index.js"]
     ports:
       - "3508:3508"
+  images:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    environment:
+      - PORT=3509
+    command: ["node", "services/images/dist/index.js"]
+    ports:
+      - "3509:3509"
+  search:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    environment:
+      - PORT=3510
+      - DATABASE_URL=postgres://app:app@db:5432/app
+    command: ["node", "services/search/dist/index.js"]
+    ports:
+      - "3510:3510"
+    depends_on: [db]
   gateway:
     build:
       context: .
@@ -110,14 +122,15 @@ services:
       - PORT=3500
       - AUTH_URL=http://auth:3501
       - PROFILE_URL=http://profile:3502
-      - CATALOG_URL=http://catalog:3503
+      - PRODUCT_ORDER_URL=http://product-order:3505
       - INVENTORY_URL=http://inventory:3504
-      - ORDERS_URL=http://orders:3505
       - PAYMENTS_URL=http://payments:3506
       - SHIPPING_URL=http://shipping:3507
       - NOTIFY_URL=http://notifications:3508
+      - IMAGES_URL=http://images:3509
+      - SEARCH_URL=http://search:3510
     command: ["node", "services/gateway/dist/index.js"]
     ports:
       - "3500:3500"
-    depends_on: [auth, profile, catalog, inventory, orders, payments, shipping, notifications]
+    depends_on: [auth, profile, product-order, inventory, payments, shipping, notifications, images, search]
 
