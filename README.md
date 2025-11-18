@@ -232,3 +232,54 @@ npm run dev
 3. **Работа с PostgreSQL:**
    - Большинство сервисов работают с PostgreSQL для хранения данных
    - Подключение настраивается через переменную окружения `DATABASE_URL`
+
+---
+
+## Тестирование
+
+Проект покрыт unit, интеграционными и E2E тестами.
+
+### Запуск тестов
+
+```bash
+# Все тесты
+npm test
+
+# Только unit тесты
+npm test -- --run services/
+
+# Только интеграционные тесты
+npm run test:integration
+
+# С покрытием кода
+npm run test:coverage
+
+# В режиме watch
+npm run test:watch
+```
+
+### Структура тестов
+
+- **Unit тесты** (`services/*/src/*.test.ts`) - тестируют отдельные сервисы и их эндпоинты
+- **Интеграционные тесты** (`tests/integration/*.integration.test.ts`) - тестируют взаимодействие между сервисами
+- **E2E тесты** (`tests/e2e/*.e2e.test.ts`) - тестируют полные пользовательские сценарии
+
+### Покрытие
+
+- Auth Service - регистрация, логин, JWT токены
+- Profile Service - профиль, корзина, адреса
+- Product+Order Service - товары, заказы, оплата
+- Payments Service - обработка платежей
+- Shipping Service - доставка, отслеживание
+- Notifications Service - отправка уведомлений
+- Images Service - загрузка и управление изображениями
+- Search Service - поиск товаров и заказов
+- Inventory Service - управление складом
+- Gateway Service - маршрутизация запросов
+
+### Требования для тестов
+
+1. PostgreSQL должен быть запущен на `localhost:5432`
+2. Тестовая БД: `app_test` (или переменная `TEST_DATABASE_URL`)
+
+Подробнее см. [tests/README.md](tests/README.md)
