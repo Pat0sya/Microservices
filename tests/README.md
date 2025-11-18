@@ -24,26 +24,31 @@ services/
 ## Запуск тестов
 
 ### Все тесты
+
 ```bash
 npm test
 ```
 
 ### Только unit тесты
+
 ```bash
 npm test -- --run services/
 ```
 
 ### Только интеграционные тесты
+
 ```bash
 npm run test:integration
 ```
 
 ### С покрытием кода
+
 ```bash
 npm run test:coverage
 ```
 
 ### В режиме watch
+
 ```bash
 npm run test:watch
 ```
@@ -68,6 +73,7 @@ export TEST_DATABASE_URL=postgres://user:password@localhost:5432/app_test
 ### Unit тесты
 
 Покрывают отдельные сервисы и их эндпоинты:
+
 - `services/auth/src/index.test.ts` - тесты Auth сервиса
 - `services/profile/src/index.test.ts` - тесты Profile сервиса
 - `services/orders/src/index.test.ts` - тесты Product+Order сервиса
@@ -82,12 +88,14 @@ export TEST_DATABASE_URL=postgres://user:password@localhost:5432/app_test
 ### Интеграционные тесты
 
 Проверяют взаимодействие между сервисами:
+
 - `auth-profile.integration.test.ts` - регистрация пользователя и создание профиля
 - `order-payment.integration.test.ts` - создание заказа, оплата и уведомления
 
 ### E2E тесты
 
 Полный пользовательский сценарий:
+
 - `full-checkout-flow.e2e.test.ts` - полный цикл от регистрации до оплаты заказа
 
 ## Покрытие
@@ -100,4 +108,3 @@ export TEST_DATABASE_URL=postgres://user:password@localhost:5432/app_test
 - Каждый тест очищает БД перед выполнением
 - Mock'и используются для HTTP-взаимодействий между сервисами
 - Тесты не требуют запущенных Docker контейнеров (кроме БД)
-
