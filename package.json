@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "seed:images": "node scripts/seed-images.js"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.8",

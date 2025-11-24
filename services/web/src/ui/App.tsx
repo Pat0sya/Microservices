@@ -15,7 +15,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-type Product = { id: string; name: string; price: number }
+type Product = { id: string; name: string; price: number; imageId?: string }
 type OrderT = { id: string; userId: string; productId: string; qty: number; status: string; trackingId?: string }
 
 function useAuthToken() {
@@ -54,6 +54,23 @@ function CatalogPage() {
       <div className="grid">
         {filtered.map(p=> (
           <div key={p.id} className="panel">
+            {p.imageId && (
+              <div style={{ marginBottom: 12, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1e293b', minHeight: 150, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <img 
+                  src={`/api/images/${p.imageId}`} 
+                  alt={p.name}
+                  style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'cover' }}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              </div>
+            )}
+            {!p.imageId && (
+              <div style={{ marginBottom: 12, borderRadius: 8, backgroundColor: '#1e293b', minHeight: 150, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                No Image
+              </div>
+            )}
             <strong>{p.name}</strong>
             <div style={{ color:'#d1fae5' }}>${p.price}</div>
             <div style={{ marginTop:8, display:'flex', gap:8 }}>
@@ -72,13 +89,31 @@ function ProductPage() {
   const q = useQuery({ queryKey:['product', id], queryFn:()=>api<Product>(`/products/${id}`) })
   if (q.isLoading) return <>Loading…</>
   if (!q.data) return <>Not found</>
+  const p = q.data
   return (
     <div>
-      <h3>{q.data.name}</h3>
-      <div>Price: ${q.data.price}</div>
-      <div>ID: {q.data.id}</div>
+      {p.imageId && (
+        <div style={{ marginBottom: 24, borderRadius: 12, overflow: 'hidden', backgroundColor: '#1e293b', minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img 
+            src={`/api/images/${p.imageId}`} 
+            alt={p.name}
+            style={{ maxWidth: '100%', maxHeight: 400, objectFit: 'cover' }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none'
+            }}
+          />
+        </div>
+      )}
+      {!p.imageId && (
+        <div style={{ marginBottom: 24, borderRadius: 12, backgroundColor: '#1e293b', minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+          No Image
+        </div>
+      )}
+      <h3>{p.name}</h3>
+      <div>Price: ${p.price}</div>
+      <div>ID: {p.id}</div>
       <div style={{ marginTop:8 }}>
-        <button onClick={()=> addToCart(q.data)}>Add to cart</button>
+        <button onClick={()=> addToCart(p)}>Add to cart</button>
       </div>
     </div>
   )
@@ -119,10 +154,10 @@ function useCart(){
         return []
       }
       
-      // We need product details for names/prices; fetch products and join
-      const products = await api<Product[]>('/products')
+    // We need product details for names/prices; fetch products and join
+    const products = await api<Product[]>('/products')
       const map = new Map(products.map(p=>[String(p.id), p]))
-      const next: CartItem[] = []
+    const next: CartItem[] = []
       
       for (const r of rows){ 
         const productIdStr = String(r.productId)
@@ -135,7 +170,7 @@ function useCart(){
       }
       
       console.log('Processed cart items:', next)
-      return next
+    return next
     } catch (e: any) {
       console.error('Fetch cart error:', e)
       // Don't return empty array on error - let the error propagate so UI can show it
@@ -459,7 +494,7 @@ function ProfilePage(){
         </div>
         <div className="panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <strong>Addresses</strong>
+          <strong>Addresses</strong>
             <button 
               className="outline" 
               onClick={() => setShowAddAddress(!showAddAddress)}

@@ -86,20 +86,35 @@ app.post("/images/upload", async (req, reply) => {
 app.get("/images/:id", async (req, reply) => {
   const id = (req.params as any).id as string;
   const metadata = imageMetadata.get(id);
-  if (!metadata) {
-    return reply.code(404).send({ error: "Image not found" });
+  
+  // Если метаданные есть, используем их
+  if (metadata) {
+    const filepath = path.join(
+      imagesDir,
+      `${id}${path.extname(metadata.filename)}`
+    );
+    if (fs.existsSync(filepath)) {
+      const fileBuffer = fs.readFileSync(filepath);
+      return reply.type(metadata.contentType).send(fileBuffer);
+    }
   }
-
-  const filepath = path.join(
-    imagesDir,
-    `${id}${path.extname(metadata.filename)}`
-  );
-  if (!fs.existsSync(filepath)) {
-    return reply.code(404).send({ error: "Image file not found" });
+  
+  // Если метаданных нет, пробуем найти файл напрямую (для seed данных)
+  const possibleExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+  for (const ext of possibleExtensions) {
+    const filepath = path.join(imagesDir, `${id}${ext}`);
+    if (fs.existsSync(filepath)) {
+      const fileBuffer = fs.readFileSync(filepath);
+      // Определяем content type по расширению
+      const contentType = ext === '.png' ? 'image/png' :
+                         ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
+                         ext === '.gif' ? 'image/gif' :
+                         ext === '.webp' ? 'image/webp' : 'image/png';
+      return reply.type(contentType).send(fileBuffer);
+    }
   }
-
-  const fileBuffer = fs.readFileSync(filepath);
-  return reply.type(metadata.contentType).send(fileBuffer);
+  
+  return reply.code(404).send({ error: "Image not found" });
 });
 
 // Получение списка всех изображений

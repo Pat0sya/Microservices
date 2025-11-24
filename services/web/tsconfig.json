@@ -10,6 +10,7 @@
     "outDir": "dist",
     "baseUrl": "."
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }
 

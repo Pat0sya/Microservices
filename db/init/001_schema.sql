@@ -26,7 +26,8 @@ create table if not exists products (
   id serial primary key,
   name text not null,
   price numeric(12,2) not null,
-  seller_id int
+  seller_id int,
+  image_id text
 );
 
 -- Cart (per user, persisted)

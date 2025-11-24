@@ -196,23 +196,23 @@ app.post('/orders/:id/received', async (req, reply) => {
 // Products endpoints (объединены с orders в один микросервис)
 
 app.get('/products', async () => {
-  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId" from products order by id limit 100');
+  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId", image_id as "imageId" from products order by id limit 100');
   return rows;
 });
 
-const createProductSchema = z.object({ name: z.string().min(1), price: z.number().positive() });
+const createProductSchema = z.object({ name: z.string().min(1), price: z.number().positive(), imageId: z.string().optional() });
 app.post('/products', async (req, reply) => {
   try { await (req as any).jwtVerify(); } catch { return reply.code(401).send({ error: 'Unauthorized' }); }
   const parsed = createProductSchema.safeParse(req.body);
   if (!parsed.success) return reply.code(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
   const user = (req as any).user as { sub: string };
-  const { rows } = await pool.query('insert into products(name, price, seller_id) values ($1,$2,$3) returning id, name, price, seller_id as "sellerId"', [parsed.data.name, parsed.data.price, Number(user.sub)]);
+  const { rows } = await pool.query('insert into products(name, price, seller_id, image_id) values ($1,$2,$3,$4) returning id, name, price, seller_id as "sellerId", image_id as "imageId"', [parsed.data.name, parsed.data.price, Number(user.sub), parsed.data.imageId || null]);
   return reply.code(201).send(rows[0]);
 });
 
 app.get('/products/:id', async (req, reply) => {
   const id = (req.params as any).id as string;
-  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId" from products where id=$1', [Number(id)]);
+  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId", image_id as "imageId" from products where id=$1', [Number(id)]);
   if (!rows.length) return reply.code(404).send({ error: 'Not found' });
   return rows[0];
 });
