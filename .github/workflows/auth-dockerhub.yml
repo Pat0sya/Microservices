@@ -23,7 +23,7 @@ on:
 
 env:
   SERVICE_NAME: auth
-  DOCKER_IMAGE: kolrpiks/auth-service
+  DOCKER_IMAGE: patosya/auth-service
 
 jobs:
   build-and-push:
