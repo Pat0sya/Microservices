@@ -23,9 +23,9 @@ on:
 
 env:
   SERVICE_NAME: search
-  YC_FOLDER_ID: YOUR_YANDEX_CLOUD_FOLDER_ID
-  YC_CONTAINER_NAME: search-service
-  YC_SERVICE_ACCOUNT_ID: YOUR_SERVICE_ACCOUNT_ID
+  YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
+  YC_CONTAINER_NAME: ${{ secrets.YC_CONTAINER_NAME }}
+  YC_SERVICE_ACCOUNT_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
 
 jobs:
   build-and-deploy:
