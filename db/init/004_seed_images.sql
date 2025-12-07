@@ -5,3 +5,4 @@
 -- Пример: обновить первые 20 продуктов с image_id
 -- UPDATE products SET image_id = 'YOUR_IMAGE_ID_HERE' WHERE id IN (SELECT id FROM products ORDER BY id LIMIT 20);
 
+

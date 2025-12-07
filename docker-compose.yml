@@ -103,6 +103,8 @@ services:
     command: ["node", "services/images/dist/index.js"]
     ports:
       - "3509:3509"
+    volumes:
+      - ./images-storage:/app/images-storage
   search:
     build:
       context: .

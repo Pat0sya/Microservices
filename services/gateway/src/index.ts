@@ -109,6 +109,7 @@ function registerProxy(prefix: string, upstreamKey: UpstreamKey) {
       }
     }
     try {
+      req.log.debug({ targetUrl, method, upstreamKey, originalPath, pathForUpstream }, 'proxying request');
       const res = await fetch(targetUrl, { method, headers, body: body as any });
       reply.status(res.status);
       res.headers.forEach((val, key) => {
@@ -118,7 +119,7 @@ function registerProxy(prefix: string, upstreamKey: UpstreamKey) {
       const buf = Buffer.from(await res.arrayBuffer());
       return reply.send(buf);
     } catch (err: any) {
-      req.log.error({ err, url: targetUrl }, 'proxy error');
+      req.log.error({ err, url: targetUrl, upstreamKey, base, originalPath, pathForUpstream }, 'proxy error');
       return reply.code(503).send({ error: 'Service Unavailable', url: targetUrl, message: err?.message || String(err) });
     }
   };

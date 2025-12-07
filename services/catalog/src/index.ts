@@ -3,7 +3,7 @@ import jwt from '@fastify/jwt';
 import { z } from 'zod';
 import pg from 'pg';
 
-type Product = { id: string; name: string; price: number; sellerId: string };
+type Product = { id: string; name: string; price: number; sellerId: string; imageId?: string };
 const { Pool } = pg as any;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -17,7 +17,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'catalog' }));
 // Seed demo products if empty
 // list products from DB
 app.get('/products', async () => {
-  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId" from products order by id limit 100');
+  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId", image_id as "imageId" from products order by id limit 100');
   return rows;
 });
 
@@ -27,13 +27,13 @@ app.post('/products', async (req, reply) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return reply.code(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
   const user = (req as any).user as { sub: string };
-  const { rows } = await pool.query('insert into products(name, price, seller_id) values ($1,$2,$3) returning id, name, price, seller_id as "sellerId"', [parsed.data.name, parsed.data.price, Number(user.sub)]);
+  const { rows } = await pool.query('insert into products(name, price, seller_id) values ($1,$2,$3) returning id, name, price, seller_id as "sellerId", image_id as "imageId"', [parsed.data.name, parsed.data.price, Number(user.sub)]);
   return reply.code(201).send(rows[0]);
 });
 
 app.get('/products/:id', async (req, reply) => {
   const id = (req.params as any).id as string;
-  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId" from products where id=$1', [Number(id)]);
+  const { rows } = await pool.query('select id, name, price, seller_id as "sellerId", image_id as "imageId" from products where id=$1', [Number(id)]);
   if (!rows.length) return reply.code(404).send({ error: 'Not found' });
   return rows[0];
 });
