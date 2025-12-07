@@ -23,7 +23,7 @@ on:
 
 env:
   SERVICE_NAME: auth
-  DOCKER_IMAGE: patosya/auth-service
+  DOCKER_IMAGE: patosya/e-commerce
 
 jobs:
   build-and-push:
