@@ -26,6 +26,8 @@ env:
   YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
   YC_CONTAINER_NAME: ${{ secrets.YC_CONTAINER_NAME }}
   YC_SERVICE_ACCOUNT_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+  YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+
 
 jobs:
   build-and-deploy:
@@ -82,7 +84,7 @@ jobs:
             echo "Container exists, updating revision..."
             yc serverless container revision deploy \
               --container-name ${{ env.YC_CONTAINER_NAME }} \
-              --image cr.yandex/${{ steps.registry.outputs.id }}/${{ env.SERVICE_NAME }}:latest \
+              --image cr.yandex/${{ env.YC_REGISTRY_ID }}/${{ env.SERVICE_NAME }}:latest \
               --service-account-id ${{ env.YC_SERVICE_ACCOUNT_ID }} \
               --memory 512MB \
               --cores 1 \
