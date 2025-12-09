@@ -71,7 +71,7 @@ jobs:
           context: .
           file: ./services/search/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: cr.yandex/${{ steps.registry.outputs.id }}/${{ env.SERVICE_NAME }}:latest
+          tags: cr.yandex/${{ env.YC_REGISTRY_ID }}/${{ env.SERVICE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
