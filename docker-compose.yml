@@ -136,3 +136,37 @@ services:
       - "3500:3500"
     depends_on: [auth, profile, product-order, inventory, payments, shipping, notifications, images, search]
 
+  loki:
+    image: grafana/loki:2.9.1
+    volumes:
+      - ./logging/loki-config.yml:/etc/loki/loki-config.yml
+      - ./loki-data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:2.9.1
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers
+      - ./logging/promtail-config.yml:/etc/promtail/promtail.yml
+    command: -config.file=/etc/promtail/promtail.yml
+    depends_on:
+      - loki
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
