@@ -26,6 +26,8 @@ env:
   YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
   YC_CONTAINER_NAME: ${{ secrets.YC_CONTAINER_NAME }}
   YC_SERVICE_ACCOUNT_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+  YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+
 
 jobs:
   build-and-deploy:
